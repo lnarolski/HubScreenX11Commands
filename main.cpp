@@ -13,7 +13,6 @@
 #define DOUBLECLICKTIMERINTERVALMS 750
 
 #define PIN 8
-double timeoutTime = 60.0;
 
 std::string exec(const char* cmd) {
 	std::array<char, 128> buffer;
