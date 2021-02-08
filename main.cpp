@@ -9,10 +9,38 @@
 #include <array>
 #include <memory>
 #include <vector>
+#include <functional>
+#include <thread>
 
 #define DOUBLECLICKTIMERINTERVALMS 750
 
 #define PIN 8
+
+class later
+{
+public:
+	bool working = false;
+	template <class callable, class... arguments>
+	later(int after, bool async, callable&& f, arguments&&... args)
+	{
+		working = true;
+		std::function<typename std::result_of<callable(arguments...)>::type()> task(std::bind(std::forward<callable>(f), std::forward<arguments>(args)...));
+
+		if (async)
+		{
+			std::thread([after, task]() {
+				std::this_thread::sleep_for(std::chrono::milliseconds(after));
+				task();
+				}).detach();
+		}
+		else
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(after));
+			task();
+		}
+	}
+
+};
 
 std::string exec(const char* cmd) {
 	std::array<char, 128> buffer;
@@ -59,6 +87,16 @@ bool IsScreenOn()
 	return false;
 }
 
+void ChangeActiveApplication() // Require installed xdotool
+{
+#ifdef DEBUG
+	system("xdotool key alt+Tab");
+	std::cout << "Changed active application" << std::endl;
+#else
+	system("xdotool key alt+Tab >> /dev/null");
+#endif // DEBUG
+}
+
 void ChangeBrowserTab() // Require installed xdotool
 {
 #ifdef DEBUG
@@ -71,6 +109,29 @@ void ChangeBrowserTab() // Require installed xdotool
 
 uint32_t numOfClicks = 0;
 std::chrono::_V2::system_clock::time_point clicksStart;
+later* timer = NULL;
+
+void CheckNumOfClicks()
+{
+#ifdef DEBUG
+	std::cout << "numOfClicks: " << numOfClicks << std::endl;
+#endif // DEBUG
+
+	switch (numOfClicks)
+	{
+	case 1:
+		ChangeActiveApplication();
+		break;
+	case 2:
+		ChangeBrowserTab();
+		break;
+	default:
+		break;
+	}
+
+	if (timer != NULL)
+		timer->working = false;
+}
 
 void PinValueChanged()
 {
@@ -83,25 +144,23 @@ void PinValueChanged()
 
 		if (IsScreenOn()) // Button/PIR "double-click"
 		{
-			std::chrono::milliseconds elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - clicksStart);
-
-#ifdef DEBUG
-			std::cout << "Elapsed time: " << elapsedTime.count() << " ms" << std::endl;
-#endif // DEBUG
-
-			if (numOfClicks == 0 || elapsedTime.count() > DOUBLECLICKTIMERINTERVALMS)
+			if (timer != NULL)
 			{
-				clicksStart = std::chrono::system_clock::now();
-				numOfClicks = 0;
+				if (!timer->working)
+				{
+					delete timer;
+					timer = new later(DOUBLECLICKTIMERINTERVALMS, true, CheckNumOfClicks);
+					numOfClicks = 1;
+				}
+				else
+				{
+					++numOfClicks;
+				}
 			}
-
-			++numOfClicks;
-
-			if (numOfClicks == 2 && elapsedTime.count() <= DOUBLECLICKTIMERINTERVALMS)
+			else
 			{
-				ChangeBrowserTab();
-
-				numOfClicks = 0;
+				timer = new later(DOUBLECLICKTIMERINTERVALMS, true, CheckNumOfClicks);
+				numOfClicks = 1;
 			}
 		}
 
