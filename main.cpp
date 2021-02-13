@@ -12,7 +12,7 @@
 #include <functional>
 #include <thread>
 
-#define DOUBLECLICKTIMERINTERVALMS 750
+#define DOUBLECLICKTIMERINTERVALMS 1000
 
 #define PIN 8
 
@@ -101,13 +101,14 @@ void ChangeBrowserTab() // Require installed xdotool
 {
 #ifdef DEBUG
 	system("xdotool key ctrl+Tab");
-	std::cout << "Switched tabs" << std::endl;
+	std::cout << std::endl << "Switched tabs" << std::endl;
 #else
 	system("xdotool key ctrl+Tab >> /dev/null");
 #endif // DEBUG
 }
 
 uint32_t numOfClicks = 0;
+bool numOfClicksLocked = false;
 std::chrono::_V2::system_clock::time_point clicksStart;
 later* timer = NULL;
 
@@ -142,8 +143,9 @@ void PinValueChanged()
 		std::cout << "Detected" << std::endl;
 #endif // DEBUG
 
-		if (IsScreenOn()) // Button/PIR "double-click"
+		if (IsScreenOn() && !numOfClicksLocked) // Button/PIR "double-click"
 		{
+			numOfClicksLocked = true;
 			if (timer != NULL)
 			{
 				if (!timer->working)
@@ -162,6 +164,9 @@ void PinValueChanged()
 				timer = new later(DOUBLECLICKTIMERINTERVALMS, true, CheckNumOfClicks);
 				numOfClicks = 1;
 			}
+
+			usleep(150000);
+			numOfClicksLocked = false;
 		}
 
 #ifdef DEBUG
